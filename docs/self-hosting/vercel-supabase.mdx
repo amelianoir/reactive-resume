@@ -1,0 +1,538 @@
+---
+title: "Deploying to Vercel with Supabase"
+description: "A comprehensive guide to deploy Reactive Resume on Vercel with Supabase as your database and storage provider."
+---
+
+## Overview
+
+This guide walks you through deploying Reactive Resume to Vercel with Supabase providing the database and storage infrastructure. This setup is ideal for:
+
+- Quick deployments without managing servers
+- Leveraging Supabase's managed PostgreSQL database
+- Using Supabase Storage (S3-compatible) for file uploads
+- Automatic scaling and HTTPS
+
+<CardGroup cols={2}>
+  <Card title="Vercel">
+    Hosts your Reactive Resume application with automatic deployments from Git.
+  </Card>
+  <Card title="Supabase">
+    Provides PostgreSQL database and S3-compatible storage for your resumes and uploads.
+  </Card>
+  <Card title="Browserless (optional)">
+    External headless Chrome service for PDF generation. Alternative: Vercel Edge Functions or external service.
+  </Card>
+</CardGroup>
+
+<Warning>
+  **Important**: Vercel has limitations on serverless function execution time (10-60 seconds depending on plan). For PDF generation, you'll need an external printer service or consider using Vercel Pro/Enterprise plans.
+</Warning>
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- A [Vercel account](https://vercel.com/signup) (free tier works)
+- A [Supabase account](https://supabase.com) (free tier works)
+- Your GitHub/GitLab repository with Reactive Resume
+- Basic familiarity with environment variables
+
+## Step 1: Set Up Supabase
+
+<Steps>
+  <Step title="Create a new Supabase project">
+    1. Log in to [Supabase](https://supabase.com)
+    2. Click **"New project"**
+    3. Choose your organization or create a new one
+    4. Enter project details:
+       - **Name**: `reactive-resume` (or your preferred name)
+       - **Database Password**: Generate a strong password and save it securely
+       - **Region**: Choose the region closest to your users
+    5. Click **"Create new project"** and wait for provisioning (usually 1-2 minutes)
+  </Step>
+
+  <Step title="Get your database connection string">
+    1. In your Supabase project dashboard, go to **Settings** → **Database**
+    2. Scroll down to **Connection string** section
+    3. Select **"URI"** tab
+    4. Copy the connection string (it looks like this):
+       ```
+       postgresql://postgres:[YOUR-PASSWORD]@db.xxxxx.supabase.co:5432/postgres
+       ```
+    5. Replace `[YOUR-PASSWORD]` with the database password you created
+    6. Save this as your `DATABASE_URL` environment variable
+
+    <Tip>
+      Make sure to use the **Transaction** connection string for optimal performance with application connections.
+    </Tip>
+  </Step>
+
+  <Step title="Set up Supabase Storage">
+    Supabase Storage is S3-compatible and perfect for storing resume files and uploads.
+
+    1. In your Supabase dashboard, go to **Storage**
+    2. Click **"Create a new bucket"**
+    3. Enter bucket details:
+       - **Name**: `reactive-resume` (or your preferred name)
+       - **Public bucket**: Leave **unchecked** (keep it private)
+    4. Click **"Create bucket"**
+
+    Now get your S3 credentials:
+
+    1. Go to **Settings** → **API**
+    2. Note down these values:
+       - **Project URL**: Your Supabase project URL
+       - **Project API keys** → **anon public**: Your public API key
+    3. For S3 compatibility, you'll need to generate service role key:
+       - Copy the **service_role** key (found under Project API keys)
+  </Step>
+
+  <Step title="Configure Storage for S3 compatibility">
+    Supabase Storage is S3-compatible. You'll need these values for your environment variables:
+
+    - **S3_ENDPOINT**: `https://[YOUR-PROJECT-REF].supabase.co/storage/v1/s3`
+    - **S3_REGION**: `auto` (or your project region like `us-east-1`)
+    - **S3_ACCESS_KEY_ID**: Your Supabase project ID (found in Settings → General)
+    - **S3_SECRET_ACCESS_KEY**: Your service role key
+    - **S3_BUCKET**: `reactive-resume` (the bucket name you created)
+    - **S3_FORCE_PATH_STYLE**: `"false"`
+
+    <Note>
+      Replace `[YOUR-PROJECT-REF]` with your actual Supabase project reference ID, which you can find in your project's URL or Settings → General.
+    </Note>
+  </Step>
+</Steps>
+
+## Step 2: Set Up the Printer Service
+
+PDF generation requires a headless Chrome browser. You have several options:
+
+<Tabs>
+  <Tab title="Browserless Cloud (Recommended)">
+    1. Sign up at [Browserless](https://www.browserless.io/)
+    2. Create an API key
+    3. Your printer endpoint will be:
+       ```
+       wss://chrome.browserless.io?token=YOUR_API_KEY
+       ```
+    4. Free tier includes 6 hours/month of usage
+  </Tab>
+
+  <Tab title="Self-Hosted Browserless">
+    Deploy Browserless on a separate service (Render, Railway, Fly.io):
+
+    ```yaml
+    services:
+      printer:
+        image: ghcr.io/browserless/chromium:latest
+        environment:
+          - CONCURRENT=10
+          - TOKEN=your-secret-token
+        ports:
+          - "3000:3000"
+    ```
+
+    Your printer endpoint will be:
+    ```
+    ws://your-browserless-url.com:3000?token=your-secret-token
+    ```
+  </Tab>
+
+  <Tab title="Alternative: External Service">
+    Use services like:
+    - [Gotenberg](https://gotenberg.dev/) - Self-hosted PDF converter
+    - [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/) - Direct Chrome integration
+    - Deploy headless Chrome on Railway, Fly.io, or Render
+  </Tab>
+</Tabs>
+
+## Step 3: Deploy to Vercel
+
+<Steps>
+  <Step title="Import your repository">
+    1. Log in to [Vercel](https://vercel.com)
+    2. Click **"Add New..."** → **"Project"**
+    3. Import your Reactive Resume repository from GitHub/GitLab/Bitbucket
+    4. Vercel will detect it as a Node.js project
+  </Step>
+
+  <Step title="Configure build settings">
+    Vercel should auto-detect the settings, but verify:
+
+    - **Framework Preset**: Vite or Other
+    - **Build Command**: `pnpm install && pnpm run build`
+    - **Output Directory**: `.output/public` (or default)
+    - **Install Command**: `pnpm install`
+    - **Development Command**: `pnpm run dev`
+
+    <Tip>
+      If you don't use pnpm, replace it with `npm` or `yarn` based on your package manager.
+    </Tip>
+  </Step>
+
+  <Step title="Add environment variables">
+    In your Vercel project settings, go to **Settings** → **Environment Variables** and add the following:
+
+    <AccordionGroup>
+      <Accordion title="Required Variables">
+        ```bash
+        # Application URL (Vercel will provide this after first deploy)
+        APP_URL=https://your-app.vercel.app
+
+        # Database (from Supabase Step 2)
+        DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.xxxxx.supabase.co:5432/postgres
+
+        # Printer Service
+        PRINTER_ENDPOINT=wss://chrome.browserless.io?token=YOUR_API_KEY
+        PRINTER_APP_URL=https://your-app.vercel.app
+
+        # Authentication Secret (generate with: openssl rand -hex 32)
+        AUTH_SECRET=your-generated-secret-key-here
+        ```
+      </Accordion>
+
+      <Accordion title="Storage Variables (Supabase S3)">
+        ```bash
+        # Supabase Storage (S3-compatible)
+        S3_ACCESS_KEY_ID=your-supabase-project-id
+        S3_SECRET_ACCESS_KEY=your-supabase-service-role-key
+        S3_REGION=auto
+        S3_ENDPOINT=https://[YOUR-PROJECT-REF].supabase.co/storage/v1/s3
+        S3_BUCKET=reactive-resume
+        S3_FORCE_PATH_STYLE=false
+        ```
+      </Accordion>
+
+      <Accordion title="Optional: Email (SMTP)">
+        ```bash
+        # Email configuration (use your SMTP provider)
+        SMTP_HOST=smtp.gmail.com
+        SMTP_PORT=587
+        SMTP_USER=your-email@gmail.com
+        SMTP_PASS=your-app-password
+        SMTP_FROM=Reactive Resume <noreply@yourdomain.com>
+        SMTP_SECURE=false
+        ```
+
+        <Tip>
+          For Gmail, use [App Passwords](https://support.google.com/accounts/answer/185833) instead of your regular password.
+        </Tip>
+      </Accordion>
+
+      <Accordion title="Optional: Social Authentication">
+        ```bash
+        # Google OAuth
+        GOOGLE_CLIENT_ID=your-google-client-id
+        GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+        # GitHub OAuth
+        GITHUB_CLIENT_ID=your-github-client-id
+        GITHUB_CLIENT_SECRET=your-github-client-secret
+
+        # Custom OAuth Provider
+        OAUTH_PROVIDER_NAME=MyProvider
+        OAUTH_CLIENT_ID=your-oauth-client-id
+        OAUTH_CLIENT_SECRET=your-oauth-client-secret
+        OAUTH_DISCOVERY_URL=https://provider.com/.well-known/openid-configuration
+        ```
+      </Accordion>
+
+      <Accordion title="Optional: Feature Flags">
+        ```bash
+        # Feature flags
+        FLAG_DISABLE_SIGNUPS=false
+        FLAG_DISABLE_EMAIL_AUTH=false
+        FLAG_DEBUG_PRINTER=false
+        ```
+      </Accordion>
+    </AccordionGroup>
+
+    <Warning>
+      Make sure to set environment variables for **Production**, **Preview**, and **Development** environments as needed.
+    </Warning>
+  </Step>
+
+  <Step title="Deploy">
+    1. Click **"Deploy"**
+    2. Vercel will build and deploy your application
+    3. Once deployed, you'll get a URL like `https://your-app.vercel.app`
+    4. Update the `APP_URL` environment variable with your actual URL
+    5. Redeploy for the changes to take effect
+  </Step>
+</Steps>
+
+## Step 4: Set Up Custom Domain (Optional)
+
+<Steps>
+  <Step title="Add your domain to Vercel">
+    1. Go to your project **Settings** → **Domains**
+    2. Add your custom domain (e.g., `resume.yourdomain.com`)
+    3. Follow Vercel's DNS configuration instructions
+  </Step>
+
+  <Step title="Update environment variables">
+    After adding your custom domain:
+    1. Update `APP_URL` to your custom domain: `https://resume.yourdomain.com`
+    2. Update `PRINTER_APP_URL` if needed
+    3. Redeploy your application
+  </Step>
+</Steps>
+
+## Verification
+
+After deployment, verify everything is working:
+
+<Steps>
+  <Step title="Check application health">
+    Visit `https://your-app.vercel.app/api/health` to ensure the app is running and can connect to the database.
+  </Step>
+
+  <Step title="Test authentication">
+    1. Go to your deployed application
+    2. Try creating an account
+    3. Verify email functionality (if SMTP is configured)
+  </Step>
+
+  <Step title="Test resume creation">
+    1. Create a new resume
+    2. Add some content
+    3. Try exporting to PDF (this tests the printer service)
+  </Step>
+
+  <Step title="Test file uploads">
+    1. Try uploading a profile photo or custom file
+    2. Verify files are stored in Supabase Storage
+  </Step>
+</Steps>
+
+## Environment Variables Reference
+
+Here's a complete list of all environment variables you might need:
+
+<AccordionGroup>
+  <Accordion title="Application Settings">
+    | Variable | Description | Required | Example |
+    |----------|-------------|----------|---------|
+    | `APP_URL` | Your application's public URL | Yes | `https://your-app.vercel.app` |
+    | `PRINTER_APP_URL` | URL for printer to access the app | No | Same as `APP_URL` |
+    | `TZ` | Timezone | No | `Etc/UTC` |
+  </Accordion>
+
+  <Accordion title="Database Settings">
+    | Variable | Description | Required | Example |
+    |----------|-------------|----------|---------|
+    | `DATABASE_URL` | PostgreSQL connection string | Yes | `postgresql://user:pass@host:5432/db` |
+  </Accordion>
+
+  <Accordion title="Printer Settings">
+    | Variable | Description | Required | Example |
+    |----------|-------------|----------|---------|
+    | `PRINTER_ENDPOINT` | Headless Chrome WebSocket URL | Yes | `wss://chrome.browserless.io?token=xxx` |
+  </Accordion>
+
+  <Accordion title="Authentication Settings">
+    | Variable | Description | Required | Example |
+    |----------|-------------|----------|---------|
+    | `AUTH_SECRET` | Secret for session encryption | Yes | Generate with `openssl rand -hex 32` |
+    | `GOOGLE_CLIENT_ID` | Google OAuth client ID | No | - |
+    | `GOOGLE_CLIENT_SECRET` | Google OAuth secret | No | - |
+    | `GITHUB_CLIENT_ID` | GitHub OAuth client ID | No | - |
+    | `GITHUB_CLIENT_SECRET` | GitHub OAuth secret | No | - |
+  </Accordion>
+
+  <Accordion title="Storage Settings (Supabase S3)">
+    | Variable | Description | Required | Example |
+    |----------|-------------|----------|---------|
+    | `S3_ACCESS_KEY_ID` | Supabase project ID | No | Your project ID |
+    | `S3_SECRET_ACCESS_KEY` | Supabase service role key | No | Your service key |
+    | `S3_REGION` | Storage region | No | `auto` |
+    | `S3_ENDPOINT` | Supabase storage endpoint | No | `https://xxx.supabase.co/storage/v1/s3` |
+    | `S3_BUCKET` | Storage bucket name | No | `reactive-resume` |
+    | `S3_FORCE_PATH_STYLE` | Path style URLs | No | `false` |
+  </Accordion>
+
+  <Accordion title="Email Settings (SMTP)">
+    | Variable | Description | Required | Example |
+    |----------|-------------|----------|---------|
+    | `SMTP_HOST` | SMTP server host | No | `smtp.gmail.com` |
+    | `SMTP_PORT` | SMTP server port | No | `587` |
+    | `SMTP_USER` | SMTP username | No | `user@gmail.com` |
+    | `SMTP_PASS` | SMTP password | No | Your app password |
+    | `SMTP_FROM` | From address | No | `Reactive Resume <noreply@domain.com>` |
+    | `SMTP_SECURE` | Use TLS | No | `false` |
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails on Vercel">
+    **Symptom**: Build process fails during deployment
+
+    **Solutions**:
+    - Verify your `package.json` has the correct build script
+    - Check that all dependencies are listed (not just in devDependencies)
+    - Review build logs in Vercel dashboard for specific errors
+    - Ensure Node.js version is compatible (check `engines` in package.json)
+  </Accordion>
+
+  <Accordion title="Database connection fails">
+    **Symptom**: App can't connect to Supabase database
+
+    **Solutions**:
+    - Verify `DATABASE_URL` is correct and includes the password
+    - Check that Supabase database is running (green status in dashboard)
+    - Ensure connection string uses Transaction pooling mode
+    - Test connection locally with the same credentials
+    - Check if Supabase has IP restrictions (shouldn't be needed for Vercel)
+  </Accordion>
+
+  <Accordion title="PDF export doesn't work">
+    **Symptom**: Cannot export resumes to PDF
+
+    **Solutions**:
+    - Verify `PRINTER_ENDPOINT` is correctly configured
+    - Check that your printer service (Browserless) is running
+    - Test the WebSocket connection: `wscat -c "wss://chrome.browserless.io?token=YOUR_TOKEN"`
+    - Ensure Vercel function timeout is sufficient (may need Pro plan)
+    - Check Browserless API quota (free tier: 6 hours/month)
+  </Accordion>
+
+  <Accordion title="File uploads fail">
+    **Symptom**: Cannot upload profile pictures or files
+
+    **Solutions**:
+    - Verify Supabase Storage bucket exists and is accessible
+    - Check all S3_* environment variables are set correctly
+    - Ensure `S3_SECRET_ACCESS_KEY` is the service role key, not anon key
+    - Verify bucket permissions in Supabase Storage settings
+    - Check Vercel function body size limits (default: 4.5MB)
+  </Accordion>
+
+  <Accordion title="Authentication/Session issues">
+    **Symptom**: Can't log in or session expires immediately
+
+    **Solutions**:
+    - Ensure `APP_URL` exactly matches your deployed URL (including https://)
+    - Generate a new `AUTH_SECRET` if you haven't already: `openssl rand -hex 32`
+    - Clear browser cookies and try again
+    - Check that cookies are not being blocked by browser settings
+    - Verify Vercel region is close to your users (reduces latency)
+  </Accordion>
+
+  <Accordion title="SMTP emails not sending">
+    **Symptom**: Verification emails not received
+
+    **Solutions**:
+    - If SMTP not configured, emails are logged to Vercel function logs (check Runtime Logs)
+    - For Gmail: Use [App Passwords](https://support.google.com/accounts/answer/185833)
+    - Verify SMTP credentials with a test script
+    - Check spam/junk folders
+    - Try a different SMTP provider (SendGrid, Mailgun, etc.)
+  </Accordion>
+
+  <Accordion title="Vercel function timeout">
+    **Symptom**: Operations fail with timeout errors
+
+    **Solutions**:
+    - Free tier: 10-second timeout
+    - Pro tier: 60-second timeout
+    - For longer operations (PDF generation), consider:
+      - Upgrading to Pro plan
+      - Using background jobs/queues
+      - Optimizing database queries
+  </Accordion>
+</AccordionGroup>
+
+## Cost Estimation
+
+Both Vercel and Supabase offer generous free tiers:
+
+<CardGroup cols={2}>
+  <Card title="Vercel Free Tier">
+    - 100 GB bandwidth/month
+    - 6,000 build minutes/month
+    - Unlimited deployments
+    - 10-second function timeout
+    - Custom domains included
+  </Card>
+  <Card title="Supabase Free Tier">
+    - 500 MB database storage
+    - 1 GB file storage
+    - 50,000 monthly active users
+    - 2 GB bandwidth
+    - Pauses after 7 days inactivity
+  </Card>
+</CardGroup>
+
+<Tip>
+  For personal use or small teams, the free tiers should be sufficient. Monitor your usage in both dashboards.
+</Tip>
+
+## Upgrading and Scaling
+
+As your usage grows, consider:
+
+1. **Vercel Pro** ($20/month):
+   - 60-second function timeout
+   - More concurrent builds
+   - Team collaboration
+
+2. **Supabase Pro** ($25/month):
+   - 8 GB database
+   - 100 GB file storage
+   - No inactivity pause
+   - Daily backups
+
+3. **External Printer Service**:
+   - Self-host Browserless on Railway/Fly.io for unlimited usage
+   - Or use Browserless Pro for higher quotas
+
+## Migration from Docker
+
+If you're currently running Reactive Resume with Docker and want to migrate:
+
+1. **Export database data** from your current PostgreSQL:
+   ```bash
+   pg_dump $DATABASE_URL > backup.sql
+   ```
+
+2. **Import to Supabase**:
+   - In Supabase dashboard, go to SQL Editor
+   - Paste and run your backup SQL
+   - Or use `psql` with Supabase connection string
+
+3. **Migrate files** to Supabase Storage:
+   - Download files from your current storage
+   - Upload to Supabase Storage using the API or dashboard
+
+4. **Update environment variables** and deploy to Vercel
+
+## Security Best Practices
+
+<Card title="Security Checklist" icon="shield-check">
+  - ✅ Use strong, unique `AUTH_SECRET` (32+ characters)
+  - ✅ Keep Supabase service role key secure (never expose to client)
+  - ✅ Enable HTTPS only (Vercel does this automatically)
+  - ✅ Use environment variables for all secrets
+  - ✅ Set up rate limiting on authentication endpoints
+  - ✅ Regularly update dependencies
+  - ✅ Monitor Vercel and Supabase logs for suspicious activity
+  - ✅ Enable Supabase Row Level Security (RLS) for additional protection
+</Card>
+
+## Next Steps
+
+- [Configure SSO](/self-hosting/sso) for enterprise authentication
+- [Set up custom domains](https://vercel.com/docs/custom-domains)
+- [Monitor application performance](https://vercel.com/docs/analytics)
+- [Configure Supabase Edge Functions](https://supabase.com/docs/guides/functions) for additional features
+
+## Support
+
+If you need help:
+
+- [Reactive Resume GitHub Issues](https://github.com/amruthpillai/reactive-resume/issues)
+- [Vercel Documentation](https://vercel.com/docs)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Join the Discord community](https://discord.gg/hzwkZbyvUW)

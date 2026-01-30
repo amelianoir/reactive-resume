@@ -180,15 +180,19 @@ Comprehensive guides are available at [docs.rxresu.me](https://docs.rxresu.me):
 | Guide                                                                       | Description                       |
 | --------------------------------------------------------------------------- | --------------------------------- |
 | [Getting Started](https://docs.rxresu.me/getting-started)                   | First-time setup and basic usage  |
-| [Self-Hosting](https://docs.rxresu.me/guides/self-hosting-with-docker)      | Deploy on your own server         |
+| [Self-Hosting with Docker](https://docs.rxresu.me/self-hosting/docker)      | Deploy on your own server with Docker |
+| [Deploy to Vercel + Supabase](https://docs.rxresu.me/self-hosting/vercel-supabase) | Deploy to Vercel with Supabase |
 | [Development Setup](https://docs.rxresu.me/contributing/development)        | Local development environment     |
 | [Project Architecture](https://docs.rxresu.me/contributing/architecture)    | Codebase structure and patterns   |
 | [Exporting Your Resume](https://docs.rxresu.me/guides/exporting-your-resume)| PDF and JSON export options       |
 
 ## Self-Hosting
 
-Reactive Resume can be self-hosted using Docker. The stack includes:
+Reactive Resume can be self-hosted in multiple ways:
 
+### Docker (Recommended for traditional servers)
+
+The Docker setup includes:
 - **PostgreSQL** — Database for storing user data and resumes
 - **Printer** — Headless Chromium service for PDF and screenshot generation
 - **SeaweedFS** (optional) — S3-compatible storage for file uploads
@@ -203,7 +207,16 @@ docker pull amruthpillai/reactive-resume:latest
 docker pull ghcr.io/amruthpillai/reactive-resume:latest
 ```
 
-See the [self-hosting guide](https://docs.rxresu.me/guides/self-hosting-with-docker) for complete instructions.
+See the [Docker self-hosting guide](https://docs.rxresu.me/self-hosting/docker) for complete instructions.
+
+### Vercel + Supabase (Serverless deployment)
+
+For a serverless deployment without managing infrastructure:
+- **Vercel** — Hosts the application with automatic scaling
+- **Supabase** — Provides PostgreSQL database and S3-compatible storage
+- **Browserless** (or similar) — External PDF generation service
+
+See the [Vercel + Supabase guide](https://docs.rxresu.me/self-hosting/vercel-supabase) for step-by-step instructions.
 
 ## Support
 
