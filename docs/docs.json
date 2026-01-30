@@ -69,7 +69,7 @@
 					},
 					{
 						"group": "Self-Hosting",
-						"pages": ["self-hosting/docker", "self-hosting/vercel-supabase", "self-hosting/examples", "self-hosting/sso", "self-hosting/migration"]
+						"pages": ["self-hosting/docker", "self-hosting/vercel-supabase", "self-hosting/cloudflare-r2", "self-hosting/examples", "self-hosting/sso", "self-hosting/migration"]
 					},
 					{
 						"group": "Contributing",

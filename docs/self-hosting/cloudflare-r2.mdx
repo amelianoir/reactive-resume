@@ -1,0 +1,388 @@
+---
+title: "Using Cloudflare R2 Storage"
+description: "Guide for configuring Reactive Resume with Cloudflare R2 object storage as an alternative to Supabase Storage."
+---
+
+## Overview
+
+Cloudflare R2 is an S3-compatible object storage service that can be used with Reactive Resume for storing uploaded files. This guide shows how to configure R2 with your Vercel + Supabase deployment.
+
+<Info>
+  **Why Cloudflare R2?** R2 offers competitive pricing with zero egress fees, making it cost-effective for applications with high download volumes. It's fully S3-compatible and works seamlessly with Reactive Resume.
+</Info>
+
+## Prerequisites
+
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up)
+- R2 enabled on your account (requires payment method, but has a generous free tier)
+- Your Reactive Resume instance already deployed (or being deployed)
+
+## Cloudflare R2 Free Tier
+
+<CardGroup cols={2}>
+  <Card title="Storage">
+    10 GB of data stored per month
+  </Card>
+  <Card title="Class A Operations">
+    1 million requests/month (writes, lists)
+  </Card>
+  <Card title="Class B Operations">
+    10 million requests/month (reads)
+  </Card>
+  <Card title="Egress">
+    **Zero egress fees** (unlimited downloads)
+  </Card>
+</CardGroup>
+
+## Step 1: Create an R2 Bucket
+
+<Steps>
+  <Step title="Access R2 Dashboard">
+    1. Log in to your [Cloudflare dashboard](https://dash.cloudflare.com/)
+    2. Click **R2** in the left sidebar
+    3. If prompted, add a payment method (required for R2, even on free tier)
+    4. Click **Create bucket**
+  </Step>
+
+  <Step title="Configure Bucket">
+    1. **Bucket name**: Choose a unique name (e.g., `reactive-resume-files`)
+       - Must be globally unique across all R2 users
+       - Use lowercase letters, numbers, and hyphens only
+    2. **Location**: Select the location closest to your users
+       - **Automatic**: Cloudflare chooses optimal location
+       - **European Union (EU)**: Forces data to stay in EU
+       - **Eastern North America**: US East Coast
+       - **Western North America**: US West Coast
+       - **Asia-Pacific**: Asia-Pacific region
+    3. Click **Create bucket**
+  </Step>
+
+  <Step title="Configure CORS (Required)">
+    R2 requires CORS configuration to allow browser access.
+
+    1. In your bucket, click **Settings**
+    2. Scroll to **CORS Policy**
+    3. Click **Add CORS policy**
+    4. Add the following configuration:
+
+    ```json
+    [
+      {
+        "AllowedOrigins": [
+          "https://your-app.vercel.app",
+          "https://your-custom-domain.com"
+        ],
+        "AllowedMethods": [
+          "GET",
+          "PUT",
+          "POST",
+          "DELETE"
+        ],
+        "AllowedHeaders": [
+          "*"
+        ],
+        "ExposeHeaders": [
+          "ETag"
+        ],
+        "MaxAgeSeconds": 3600
+      }
+    ]
+    ```
+
+    <Warning>
+      Replace `your-app.vercel.app` and `your-custom-domain.com` with your actual domains. Don't use wildcards (*) in production for security.
+    </Warning>
+  </Step>
+</Steps>
+
+## Step 2: Create R2 API Tokens
+
+<Steps>
+  <Step title="Navigate to API Tokens">
+    1. In the Cloudflare dashboard, stay in **R2** section
+    2. Click **Manage R2 API Tokens** (top right)
+    3. Click **Create API token**
+  </Step>
+
+  <Step title="Configure Token Permissions">
+    1. **Token name**: Give it a descriptive name (e.g., `reactive-resume-token`)
+    2. **Permissions**: Select **Admin Read & Write** (or custom permissions)
+       - **Object Read & Write**: For production use
+       - **Admin Read & Write**: For full control
+    3. **Specify bucket(s)**: 
+       - Select **Apply to specific buckets only**
+       - Choose your `reactive-resume-files` bucket
+    4. **TTL**: Leave as default (no expiration) or set custom expiration
+    5. Click **Create API Token**
+  </Step>
+
+  <Step title="Save Your Credentials">
+    After creating the token, you'll see three values. **Save these immediately** as they won't be shown again:
+
+    1. **Access Key ID**: `4a423882a35c7aa8b9c5146a0a91c323` (example)
+    2. **Secret Access Key**: `fd42620fb2c16c2e3236c048ee131a92941b9f400e09a02ea27436a471b6f00a` (example)
+    3. **Endpoint**: `https://[account-id].r2.cloudflarestorage.com`
+       - OR jurisdiction-specific: `https://[endpoint-id].r2.cloudflarestorage.com`
+
+    <Warning>
+      **CRITICAL**: Store these credentials securely. Never commit them to git or share them publicly. If exposed, immediately revoke the token and create a new one.
+    </Warning>
+  </Step>
+</Steps>
+
+## Step 3: Configure Vercel Environment Variables
+
+<Steps>
+  <Step title="Open Vercel Project Settings">
+    1. Go to your project on [Vercel](https://vercel.com)
+    2. Click **Settings** → **Environment Variables**
+  </Step>
+
+  <Step title="Add R2 Configuration">
+    Add the following environment variables with your **actual** R2 credentials:
+
+    ```bash
+    # S3-Compatible Storage (Cloudflare R2)
+    S3_ACCESS_KEY_ID=your-r2-access-key-id
+    S3_SECRET_ACCESS_KEY=your-r2-secret-access-key
+    S3_ENDPOINT=https://account-id.r2.cloudflarestorage.com
+    S3_REGION=auto
+    S3_BUCKET=reactive-resume-files
+    S3_FORCE_PATH_STYLE=true
+    ```
+
+    **Important field notes:**
+
+    - **S3_ACCESS_KEY_ID**: Your R2 Access Key ID from Step 2
+    - **S3_SECRET_ACCESS_KEY**: Your R2 Secret Access Key from Step 2
+    - **S3_ENDPOINT**: Your R2 endpoint URL (include `https://`)
+    - **S3_REGION**: Use `auto` for R2 (Cloudflare handles regions automatically)
+    - **S3_BUCKET**: Your bucket name from Step 1
+    - **S3_FORCE_PATH_STYLE**: Must be `"true"` for R2 (as a string)
+
+    <Tip>
+      Set these variables for **Production** environment. Preview and Development can inherit from Production or use separate test buckets.
+    </Tip>
+  </Step>
+
+  <Step title="Redeploy">
+    After adding environment variables:
+    1. Click **Deployments** tab
+    2. Click the **•••** menu on the latest deployment
+    3. Select **Redeploy**
+    4. Check **Use existing Build Cache** if available
+    5. Click **Redeploy**
+  </Step>
+</Steps>
+
+## Step 4: Verify Configuration
+
+<Steps>
+  <Step title="Test File Upload">
+    1. Go to your deployed Reactive Resume application
+    2. Log in or create an account
+    3. Try uploading a profile picture or file
+    4. If successful, the file is now stored in R2
+  </Step>
+
+  <Step title="Check R2 Bucket">
+    1. Go to Cloudflare R2 dashboard
+    2. Open your bucket
+    3. You should see uploaded files appearing in the bucket
+  </Step>
+
+  <Step title="Monitor Usage">
+    1. In R2 dashboard, check **Metrics** tab
+    2. Monitor storage usage and requests
+    3. Ensure you're within free tier limits (if applicable)
+  </Step>
+</Steps>
+
+## Complete Example Configuration
+
+Here's what your Vercel environment variables should look like (with your actual values):
+
+```bash
+# ============================================
+# DATABASE (SUPABASE)
+# ============================================
+DATABASE_URL=******db.xxxxx.supabase.co:5432/postgres
+
+# ============================================
+# STORAGE (CLOUDFLARE R2)
+# ============================================
+S3_ACCESS_KEY_ID=4a423882a35c7aa8b9c5146a0a91c323
+S3_SECRET_ACCESS_KEY=fd42620fb2c16c2e3236c048ee131a92941b9f400e09a02ea27436a471b6f00a
+S3_ENDPOINT=https://d368af2f54ae34f2e58c8a4f36b7ab26.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_BUCKET=reactive-resume-files
+S3_FORCE_PATH_STYLE=true
+
+# ============================================
+# APPLICATION
+# ============================================
+APP_URL=https://your-app.vercel.app
+PRINTER_ENDPOINT=wss://chrome.browserless.io?token=YOUR_TOKEN
+AUTH_SECRET=your-generated-secret-key
+
+# ============================================
+# OPTIONAL: PRINTER
+# ============================================
+PRINTER_APP_URL=https://your-app.vercel.app
+```
+
+<Warning>
+  **Replace all example values with your actual credentials.** Never use the example values shown in documentation.
+</Warning>
+
+## Comparison: Supabase Storage vs Cloudflare R2
+
+| Feature | Supabase Storage | Cloudflare R2 |
+|---------|------------------|---------------|
+| **Free Tier Storage** | 1 GB | 10 GB |
+| **Free Tier Bandwidth** | 2 GB | Unlimited (zero egress fees) |
+| **Pricing Model** | Pay for storage + bandwidth | Pay for storage + operations only |
+| **Best For** | Simple setup, integrated with Supabase DB | High download volumes, global distribution |
+| **Setup Complexity** | Easier (same dashboard as DB) | Slightly more steps |
+| **S3 Compatibility** | Full | Full |
+| **CDN** | Built-in | Cloudflare's global network |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: SignatureDoesNotMatch">
+    **Cause**: Incorrect Access Key ID or Secret Access Key
+
+    **Solutions**:
+    - Verify credentials in Vercel environment variables match R2 API token
+    - Check for extra spaces or line breaks in the secret key
+    - Regenerate API token in Cloudflare and update Vercel
+  </Accordion>
+
+  <Accordion title="Error: NoSuchBucket">
+    **Cause**: Bucket name mismatch or bucket doesn't exist
+
+    **Solutions**:
+    - Verify `S3_BUCKET` matches your R2 bucket name exactly (case-sensitive)
+    - Check bucket exists in Cloudflare R2 dashboard
+    - Ensure API token has permissions for this bucket
+  </Accordion>
+
+  <Accordion title="Error: AccessDenied">
+    **Cause**: API token lacks necessary permissions
+
+    **Solutions**:
+    - Check API token has **Object Read & Write** permissions
+    - Verify token is applied to correct bucket
+    - Regenerate token with proper permissions
+  </Accordion>
+
+  <Accordion title="CORS Errors in Browser">
+    **Cause**: CORS policy not configured or incorrect
+
+    **Solutions**:
+    - Add CORS policy in R2 bucket settings (see Step 1.3)
+    - Verify your domain is listed in AllowedOrigins
+    - Don't use wildcards in production
+    - Clear browser cache and try again
+  </Accordion>
+
+  <Accordion title="Files Not Appearing">
+    **Cause**: Upload succeeded but files not visible
+
+    **Solutions**:
+    - Check R2 bucket in Cloudflare dashboard
+    - Verify `S3_FORCE_PATH_STYLE=true` is set
+    - Check `S3_ENDPOINT` includes `https://`
+    - Review Vercel function logs for errors
+  </Accordion>
+
+  <Accordion title="High Costs / Unexpected Charges">
+    **Cause**: Exceeding free tier limits
+
+    **Solutions**:
+    - Monitor usage in R2 Metrics dashboard
+    - Free tier: 10GB storage, 1M Class A ops, 10M Class B ops
+    - R2 charges for storage above 10GB and operations above free tier
+    - No egress fees ever (R2's key advantage)
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+<Card title="R2 Security Checklist" icon="shield-check">
+  - ✅ Use API tokens with **minimum required permissions** (Object Read & Write, not Admin)
+  - ✅ **Restrict tokens to specific buckets** only
+  - ✅ Never commit API credentials to git repositories
+  - ✅ Store credentials **only in Vercel Environment Variables**
+  - ✅ Use separate tokens for development/staging/production
+  - ✅ Set token expiration dates for enhanced security
+  - ✅ Regularly rotate API tokens (recommended: every 90 days)
+  - ✅ Monitor R2 access logs for suspicious activity
+  - ✅ Configure proper CORS policy (don't use wildcards)
+  - ✅ Enable Cloudflare Access if you need additional authentication
+</Card>
+
+## Cost Optimization Tips
+
+1. **Use R2's Free Tier Effectively**:
+   - 10 GB storage is generous for most resume builder usage
+   - Zero egress fees = unlimited downloads at no cost
+
+2. **Optimize File Sizes**:
+   - Compress images before upload
+   - Use appropriate file formats (WebP for images, etc.)
+   - Set reasonable file size limits in application
+
+3. **Clean Up Old Files**:
+   - Implement lifecycle policies to delete old/unused files
+   - Use R2's object lifecycle features
+
+4. **Monitor Usage**:
+   - Check R2 Metrics regularly
+   - Set up alerts for approaching free tier limits
+
+## Migration from Supabase Storage to R2
+
+If you're migrating from Supabase Storage to R2:
+
+<Steps>
+  <Step title="Export from Supabase">
+    ```bash
+    # Download all files from Supabase Storage
+    # Use Supabase CLI or write a migration script
+    ```
+  </Step>
+
+  <Step title="Upload to R2">
+    ```bash
+    # Use AWS CLI (compatible with R2)
+    aws s3 sync ./downloaded-files s3://reactive-resume-files \
+      --endpoint-url https://[account-id].r2.cloudflarestorage.com
+    ```
+  </Step>
+
+  <Step title="Update Environment Variables">
+    Switch from Supabase Storage config to R2 config in Vercel
+  </Step>
+
+  <Step title="Redeploy and Test">
+    Redeploy application and verify file access works
+  </Step>
+</Steps>
+
+## Additional Resources
+
+- [Cloudflare R2 Documentation](https://developers.cloudflare.com/r2/)
+- [R2 Pricing](https://developers.cloudflare.com/r2/pricing/)
+- [S3 API Compatibility](https://developers.cloudflare.com/r2/api/s3/)
+- [Vercel Environment Variables](https://vercel.com/docs/environment-variables)
+
+## Support
+
+If you encounter issues:
+
+- Check [Cloudflare R2 Status](https://www.cloudflarestatus.com/)
+- Review [Cloudflare Community](https://community.cloudflare.com/)
+- [Reactive Resume GitHub Issues](https://github.com/amruthpillai/reactive-resume/issues)
+- [Reactive Resume Discord](https://discord.gg/hzwkZbyvUW)
