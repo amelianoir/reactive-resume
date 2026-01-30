@@ -63,7 +63,7 @@ Before you begin, make sure you have:
     6. Save this as your `DATABASE_URL` environment variable
 
     <Tip>
-      Make sure to use the **Transaction** connection string for optimal performance with application connections.
+      For production use, consider using Supabase's **Connection Pooling** with Transaction mode for better performance. Find this under Settings → Database → Connection Pooling. It provides a different port (6543) and better handles serverless connections.
     </Tip>
   </Step>
 
@@ -92,10 +92,10 @@ Before you begin, make sure you have:
 
     - **S3_ENDPOINT**: `https://[YOUR-PROJECT-REF].supabase.co/storage/v1/s3`
     - **S3_REGION**: `auto` (or your project region like `us-east-1`)
-    - **S3_ACCESS_KEY_ID**: Your Supabase project ID (found in Settings → General)
-    - **S3_SECRET_ACCESS_KEY**: Your service role key
+    - **S3_ACCESS_KEY_ID**: Your Supabase Project ID (20-character reference found in Settings → General → Reference ID)
+    - **S3_SECRET_ACCESS_KEY**: Your service_role key (from Settings → API → service_role key under Project API keys)
     - **S3_BUCKET**: `reactive-resume` (the bucket name you created)
-    - **S3_FORCE_PATH_STYLE**: `"false"`
+    - **S3_FORCE_PATH_STYLE**: `"false"` (as a string - the application handles string conversion)
 
     <Note>
       Replace `[YOUR-PROJECT-REF]` with your actual Supabase project reference ID, which you can find in your project's URL or Settings → General.
@@ -248,7 +248,12 @@ PDF generation requires a headless Chrome browser. You have several options:
     </AccordionGroup>
 
     <Warning>
-      Make sure to set environment variables for **Production**, **Preview**, and **Development** environments as needed.
+      **Environment Configuration**: In Vercel, set environment variables for each environment:
+      - **Production**: Use production database and storage credentials
+      - **Preview**: Can use the same as production (read-only operations) or a separate staging database
+      - **Development**: Optional - only needed if running `vercel dev` locally
+      
+      For most setups, configuring only Production environment variables is sufficient. Preview deployments will automatically use Production variables.
     </Warning>
   </Step>
 
@@ -424,7 +429,9 @@ Here's a complete list of all environment variables you might need:
     **Symptom**: Verification emails not received
 
     **Solutions**:
-    - If SMTP not configured, emails are logged to Vercel function logs (check Runtime Logs)
+    - If SMTP not configured, emails are logged to Vercel function logs:
+      - Navigate to: **Project → Deployments → [Select deployment] → Functions tab → Runtime Logs**
+      - Look for email content in the logs
     - For Gmail: Use [App Passwords](https://support.google.com/accounts/answer/185833)
     - Verify SMTP credentials with a test script
     - Check spam/junk folders
@@ -461,7 +468,7 @@ Both Vercel and Supabase offer generous free tiers:
     - 1 GB file storage
     - 50,000 monthly active users
     - 2 GB bandwidth
-    - Pauses after 7 days inactivity
+    - **Note**: Free tier projects pause after 7 days of inactivity (all services including database become unavailable until manually reactivated)
   </Card>
 </CardGroup>
 
@@ -498,9 +505,12 @@ If you're currently running Reactive Resume with Docker and want to migrate:
    ```
 
 2. **Import to Supabase**:
-   - In Supabase dashboard, go to SQL Editor
-   - Paste and run your backup SQL
-   - Or use `psql` with Supabase connection string
+   - **For small databases**: In Supabase dashboard, go to SQL Editor, paste and run your backup SQL
+   - **For large databases or complex schemas**: Use `psql` command with Supabase connection string:
+     ```bash
+     psql "postgresql://postgres:PASSWORD@db.xxxxx.supabase.co:5432/postgres" < backup.sql
+     ```
+   - **Note**: Some PostgreSQL extensions or features may not be available in Supabase. Review migration logs for any errors and adjust as needed.
 
 3. **Migrate files** to Supabase Storage:
    - Download files from your current storage
@@ -515,7 +525,7 @@ If you're currently running Reactive Resume with Docker and want to migrate:
   - ✅ Keep Supabase service role key secure (never expose to client)
   - ✅ Enable HTTPS only (Vercel does this automatically)
   - ✅ Use environment variables for all secrets
-  - ✅ Set up rate limiting on authentication endpoints
+  - ✅ Rate limiting: Requires Vercel Pro with Edge Middleware or external service (e.g., Upstash Rate Limit)
   - ✅ Regularly update dependencies
   - ✅ Monitor Vercel and Supabase logs for suspicious activity
   - ✅ Enable Supabase Row Level Security (RLS) for additional protection
